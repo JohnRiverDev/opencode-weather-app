@@ -1,4 +1,5 @@
-import { buscarCiudad, obtenerClima } from "./src/api.ts";
+import { buscarCiudad, obtenerClima, obtenerPronostico } from "./src/api.ts";
+import { amarillo, rojo, verde } from "./src/colors.ts";
 import { cargarEstado, guardarEstado } from "./src/state.ts";
 import type { AppState, City, Unit } from "./src/types.ts";
 import { cerrarLectura, mostrarMenu, preguntar } from "./src/ui.ts";
@@ -14,9 +15,28 @@ function mensajeCiudad(ciudad: { name: string; country?: string }): string {
 async function mostrarClima(ciudad: City, unidad: Unit): Promise<void> {
   try {
     const clima = await obtenerClima(ciudad, unidad);
-    console.log(`\n  ${mensajeCiudad(ciudad)}: ${clima.temperature}${clima.symbol}`);
+    console.log(`\n  ${mensajeCiudad(ciudad)}: ${amarillo(`${clima.temperature}${clima.symbol}`)}`);
   } catch (error) {
-    console.error(`\n  Error al obtener el clima de ${mensajeCiudad(ciudad)}: ${(error as Error).message}`);
+    console.error(rojo(`\n  Error al obtener el clima de ${mensajeCiudad(ciudad)}: ${(error as Error).message}`));
+  }
+}
+
+function formatearFecha(fecha: string): string {
+  const date = new Date(`${fecha}T00:00:00`);
+  return date.toLocaleDateString("es", { weekday: "short", day: "numeric", month: "short" });
+}
+
+async function mostrarPronostico(ciudad: City, unidad: Unit): Promise<void> {
+  try {
+    const pronostico = await obtenerPronostico(ciudad, unidad);
+    console.log(`\n  Pronóstico 7 días de ${mensajeCiudad(ciudad)}:`);
+    for (const dia of pronostico.days) {
+      console.log(
+        `    ${formatearFecha(dia.date)}: mín ${amarillo(`${dia.min}${pronostico.symbol}`)} / máx ${amarillo(`${dia.max}${pronostico.symbol}`)}`
+      );
+    }
+  } catch (error) {
+    console.error(rojo(`\n  Error al obtener el pronóstico de ${mensajeCiudad(ciudad)}: ${(error as Error).message}`));
   }
 }
 
@@ -49,12 +69,12 @@ async function buscarYAgregar(estado: AppState): Promise<void> {
   try {
     resultado = await buscarCiudad(nombre);
   } catch (error) {
-    console.error(`\n  Error al buscar "${nombre}": ${(error as Error).message}`);
+    console.error(rojo(`\n  Error al buscar "${nombre}": ${(error as Error).message}`));
     return;
   }
 
   if (!resultado) {
-    console.log(`\n  No se encontró la ciudad "${nombre}".`);
+    console.log(rojo(`\n  No se encontró la ciudad "${nombre}".`));
     return;
   }
 
@@ -66,7 +86,7 @@ async function buscarYAgregar(estado: AppState): Promise<void> {
   }
 
   if (estado.cities.some((ciudad) => ciudad.name.toLowerCase() === resultado.name.toLowerCase())) {
-    console.log("\n  Esa ciudad ya está registrada.");
+    console.log(rojo("\n  Esa ciudad ya está registrada."));
     return;
   }
 
@@ -79,7 +99,7 @@ async function buscarYAgregar(estado: AppState): Promise<void> {
   };
   estado.cities.push(nueva);
   await guardarEstado(estado);
-  console.log(`\n  "${nueva.name}" fue agregada correctamente.`);
+  console.log(verde(`\n  "${nueva.name}" fue agregada correctamente.`));
 }
 
 async function seleccionarCiudad(estado: AppState, mensaje: string): Promise<City | null> {
@@ -100,7 +120,7 @@ async function seleccionarCiudad(estado: AppState, mensaje: string): Promise<Cit
   }
   const indice = Number(seleccion) - 1;
   if (!Number.isInteger(indice) || indice < 0 || indice >= estado.cities.length) {
-    console.log("\n  Selección no válida.");
+    console.log(rojo("\n  Selección no válida."));
     return null;
   }
 
@@ -118,7 +138,15 @@ async function eliminarCiudad(estado: AppState): Promise<void> {
     estado.defaultCityId = null;
   }
   await guardarEstado(estado);
-  console.log(`\n  "${ciudad.name}" fue eliminada.`);
+  console.log(verde(`\n  "${ciudad.name}" fue eliminada.`));
+}
+
+async function pronostico7Dias(estado: AppState): Promise<void> {
+  const ciudad = await seleccionarCiudad(estado, "Número de ciudad para el pronóstico (vacío para cancelar)");
+  if (!ciudad) {
+    return;
+  }
+  await mostrarPronostico(ciudad, estado.unit);
 }
 
 async function establecerDefault(estado: AppState): Promise<void> {
@@ -134,13 +162,13 @@ async function establecerDefault(estado: AppState): Promise<void> {
 
   estado.defaultCityId = ciudad.id;
   await guardarEstado(estado);
-  console.log(`\n  Ciudad default establecida: ${mensajeCiudad(ciudad)}`);
+  console.log(verde(`\n  Ciudad default establecida: ${mensajeCiudad(ciudad)}`));
 }
 
 function toglearUnidad(estado: AppState): void {
   estado.unit = estado.unit === "celsius" ? "fahrenheit" : "celsius";
   const unidad = estado.unit === "celsius" ? "°C" : "°F";
-  console.log(`\n  Unidad de temperatura: ${unidad}`);
+  console.log(verde(`\n  Unidad de temperatura: ${unidad}`));
 }
 
 async function main(): Promise<void> {
@@ -167,6 +195,9 @@ async function main(): Promise<void> {
       case "5":
         await establecerDefault(estado);
         break;
+      case "6":
+        await pronostico7Dias(estado);
+        break;
       case "8":
         toglearUnidad(estado);
         await guardarEstado(estado);
@@ -175,7 +206,7 @@ async function main(): Promise<void> {
         seguir = false;
         break;
       default:
-        console.log("\n  Opción no válida.");
+        console.log(rojo("\n  Opción no válida."));
     }
   }
 

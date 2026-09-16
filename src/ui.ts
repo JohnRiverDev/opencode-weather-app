@@ -1,4 +1,5 @@
 import * as readline from "node:readline";
+import { cian } from "./colors.ts";
 import type { AppState } from "./types.ts";
 
 const rl = readline.createInterface({
@@ -42,15 +43,16 @@ export function cerrarLectura(): void {
 
 export function mostrarMenu(estado: AppState): void {
   const unidad = estado.unit === "celsius" ? "°C" : "°F";
-  console.log("════════════════════════════════════════");
-  console.log("         WEATHER CLI");
-  console.log("════════════════════════════════════════");
-  console.log("  1. Clima de ciudad default");
-  console.log(`  2. Clima de todas las ciudades (${estado.cities.length})`);
-  console.log("  3. Buscar y agregar ciudad");
-  console.log("  4. Eliminar ciudad");
-  console.log("  5. Establecer ciudad default");
-  console.log(`  8. Ajustes (${unidad})`);
-  console.log("  9. Salir");
-  console.log("════════════════════════════════════════");
+  console.log(cian("════════════════════════════════════════"));
+  console.log(cian("         WEATHER CLI"));
+  console.log(cian("════════════════════════════════════════"));
+  console.log(cian("  1. Clima de ciudad default"));
+  console.log(cian(`  2. Clima de todas las ciudades (${estado.cities.length})`));
+  console.log(cian("  3. Buscar y agregar ciudad"));
+  console.log(cian("  4. Eliminar ciudad"));
+  console.log(cian("  5. Establecer ciudad default"));
+  console.log(cian("  6. Pronóstico 7 días"));
+  console.log(cian(`  8. Ajustes (${unidad})`));
+  console.log(cian("  9. Salir"));
+  console.log(cian("════════════════════════════════════════"));
 }

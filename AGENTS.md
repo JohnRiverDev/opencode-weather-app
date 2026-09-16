@@ -1,8 +1,9 @@
 # AGENTS.md
 
 ## Overview
-Bun-only TypeScript CLI app (course project, `02-weather`). Interactive weather CLI for multiple cities, backed by the keyless OpenMeteo API. Entrypoint `index.ts` (menu loop); modules in `src/`:
-- `api.ts` — OpenMeteo geocoding (`buscarCiudad`) and forecast (`obtenerClima`)
+Bun-only TypeScript CLI app (course project, `02-weather`). Interactive weather CLI for multiple cities, backed by the keyless OpenMeteo API. Entrypoint `index.ts` (menu loop, fully working); modules in `src/`:
+- `api.ts` — OpenMeteo geocoding (`buscarCiudad`), current forecast (`obtenerClima`) and 7-day forecast (`obtenerPronostico`)
+- `colors.ts` — ANSI color helpers: cyanish menu, yellow temps, green ok, red errors
 - `state.ts` — load/save persisted app state
 - `ui.ts` — readline prompter (`preguntar`) and menu render
 - `types.ts` — shared types

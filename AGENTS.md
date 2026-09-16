@@ -1,7 +1,13 @@
 # AGENTS.md
 
 ## Overview
-Bun-only TypeScript CLI app (course project, `02-weather`). Single entrypoint `index.ts` (currently a "Hello via Bun!" stub). Goal per README: interactive weather CLI for multiple cities, backed by the keyless OpenMeteo API.
+Bun-only TypeScript CLI app (course project, `02-weather`). Interactive weather CLI for multiple cities, backed by the keyless OpenMeteo API. Entrypoint `index.ts` (menu loop); modules in `src/`:
+- `api.ts` — OpenMeteo geocoding (`buscarCiudad`) and forecast (`obtenerClima`)
+- `state.ts` — load/save persisted app state
+- `ui.ts` — readline prompter (`preguntar`) and menu render
+- `types.ts` — shared types
+
+State (cities, default city, °C/°F) persists to `weather-state.json` in cwd (gitignored).
 
 ## Commands
 - Run: `bun run index.ts`

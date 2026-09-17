@@ -5,12 +5,13 @@ on:
     branches:
       - main
 
+# Otorgar permiso de escritura para crear Tags y Releases
+permissions:
+  contents: write
+
 jobs:
   release:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,11 +43,13 @@ jobs:
       - name: Create Release
         if: steps.check_tag.outputs.tag_exists == 'false'
         id: create_release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.get_version.outputs.version }}
-          release_name: Release v${{ steps.get_version.outputs.version }}
+          name: Release v${{ steps.get_version.outputs.version }}
           draft: false
           prerelease: false
           files: |
             out/weather.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

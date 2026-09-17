@@ -3,6 +3,7 @@
   "module": "src/index.ts",
   "type": "module",
   "private": true,
+  "version": "1.0.0",
   "scripts": {
     "build": "bun test tests/ && bun build --compile src/index.ts --outfile out/weather.exe",
     "start": "bun run src/index.ts",

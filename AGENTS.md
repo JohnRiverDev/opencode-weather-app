@@ -18,8 +18,9 @@ State (cities, default city, °C/°F) persists to `weather-state.json` in cwd (g
 - Execute binary: `bun run build` = primero `bun test tests/` y, solo si pasan, `bun build --compile src/index.ts --outfile out/weather.exe` (la build **se bloquea si algún test falla**). Output dirs `out`/`dist` are gitignored.
 - A compiled binary is the project goal (see README "binario ejecutable").
 - Type check if needed: `bunx tsc --noEmit`. No lint/format scripts exist — don't invent them.
-- Tests live in `tests/`, use `import * as X from "bun:test"` API (`describe`/`test`/`expect`/`mock`/`spyOn`), mock `globalThis.fetch` for API calls and `mock.module` for modules with side effects.
-- Bun test runs **all test files in a single process**: `mock.module` and `globalThis` changes persist for the whole run and leak across files. The only file that mocks source modules is `tests/zzz-actions.test.ts` — keep it named `zzz-*` (or later in alphabetical order) so its global mocks never break the other specs (`api`, `input`, `storage`).
+- Tests live in `tests/`, mirroring the `src/` layout (same subfolders plus `helpers/` and `index.test.ts` E2E). Use `import * as X from "bun:test"` API (`describe`/`test`/`expect`/`mock`/`spyOn`).
+- **No `mock.module` on source modules.** The only mock module is `node:readline` via the shared helper `tests/helpers/fakeReadline.ts` (`mock.module("node:readline", ...)` + `emitLine`/`emitClose`), used by `presentation/input.test.ts` and `actions/actions.test.ts` to feed input lines (queued before the call or after `preguntar` starts). API calls are stubbed with `globalThis.fetch` mocks (`mock((input) => new Response(...))`); storage uses the real `stateStorage` with `process.chdir()` to a temp dir per test so `weather-state.json` never touches the repo.
+- Bun test runs **all test files in a single process**: `mock.module`, `globalThis` changes, and `process.chdir` persists across files. Keep cross-file side effects paired (restore `fetch` in `afterEach`, restore cwd + remove temp dirs in `afterEach`) and leave no pending readline resolvers (every `preguntar` must receive a line or `emitClose`).
 
 ## Conventions
 - Package manager is **Bun** (`bun.lock` committed). Never use npm/yarn; don't add extra dependencies.

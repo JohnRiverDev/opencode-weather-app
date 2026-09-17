@@ -1,28 +1,8 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test";
-import type { AppState, City } from "../src/types/City.ts";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import type { AppState, City } from "../../src/types/City.ts";
+import { emitClose, emitLine } from "../helpers/fakeReadline.ts";
 
-type Handler = (...args: unknown[]) => void;
-const handlers = new Map<string, Handler>();
-
-const fakeRl = {
-  on(evento: string, cb: Handler) {
-    handlers.set(evento, cb);
-    return fakeRl;
-  },
-  close() {
-    handlers.get("close")?.();
-  },
-};
-
-await mock.module("node:readline", () => ({
-  createInterface: () => fakeRl,
-}));
-
-const { preguntar, seleccionarCiudad } = await import("../src/presentation/input.ts");
-
-function emitLine(texto: string): void {
-  handlers.get("line")?.(texto);
-}
+const { preguntar, seleccionarCiudad } = await import("../../src/presentation/input.ts");
 
 function ciudad(parcial: Partial<City> = {}): City {
   return {
@@ -47,9 +27,9 @@ afterEach(() => {
 
 describe("preguntar", () => {
   test("escribe el prompt en stdout", async () => {
-    const write = spyOn(process.stdout, "write");
+    const write = spyOn(process.stdout, "write").mockImplementation(() => true);
     const p = preguntar("  Selecciona: ");
-    fakeRl.close();
+    emitClose();
     await p;
     expect(write).toHaveBeenCalledWith("  Selecciona: ");
   });
@@ -67,21 +47,21 @@ describe("preguntar", () => {
 
   test("resuelve con cadena vacía si se cierra la interfaz", async () => {
     const p = preguntar("prompt: ");
-    fakeRl.close();
+    emitClose();
     expect(await p).toBe("");
   });
 });
 
 describe("seleccionarCiudad", () => {
   test("devuelve null y avisa si no hay ciudades", async () => {
-    const log = spyOn(console, "log");
+    const log = spyOn(console, "log").mockImplementation(() => {});
     const resultado = await seleccionarCiudad(estadoCiudades([]), "Elige");
     expect(resultado).toBeNull();
     expect(log).toHaveBeenCalledWith(expect.stringContaining("No hay ciudades registradas"));
   });
 
   test("devuelve null si se cancela con una línea vacía", async () => {
-    const log = spyOn(console, "log");
+    const log = spyOn(console, "log").mockImplementation(() => {});
     const promesa = seleccionarCiudad(estadoCiudades([ciudad()]), "Elige");
     emitLine("  ");
     expect(await promesa).toBeNull();
@@ -89,7 +69,7 @@ describe("seleccionarCiudad", () => {
   });
 
   test("devuelve null si la selección no es válida", async () => {
-    const error = spyOn(console, "error");
+    const error = spyOn(console, "error").mockImplementation(() => {});
     const promesa = seleccionarCiudad(estadoCiudades([ciudad()]), "Elige");
     emitLine("abc");
     expect(await promesa).toBeNull();
@@ -97,7 +77,7 @@ describe("seleccionarCiudad", () => {
   });
 
   test("devuelve null si el índice está fuera de rango", async () => {
-    const error = spyOn(console, "error");
+    const error = spyOn(console, "error").mockImplementation(() => {});
     const promesa = seleccionarCiudad(estadoCiudades([ciudad()]), "Elige");
     emitLine("5");
     expect(await promesa).toBeNull();

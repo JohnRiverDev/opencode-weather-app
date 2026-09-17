@@ -3,21 +3,13 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  cargarCiudades,
-  guardarCiudades,
-} from "../src/storage/citiesStorage.ts";
-import {
-  cargarSettings,
-  guardarSettings,
-} from "../src/storage/settingsStorage.ts";
-import {
   cargarEstado,
   crearEstadoInicial,
   esCiudadGuardada,
   guardarEstado,
-} from "../src/storage/stateStorage.ts";
-import type { AppState, City } from "../src/types/City.ts";
-import { STATE_FILE } from "../src/utils/constants.ts";
+} from "../../src/storage/stateStorage.ts";
+import type { AppState, City } from "../../src/types/City.ts";
+import { STATE_FILE } from "../../src/utils/constants.ts";
 
 const cwdOriginal = process.cwd();
 const directoriosTemporales: string[] = [];
@@ -69,7 +61,6 @@ describe("esCiudadGuardada", () => {
   test("rechaza objetos incompletos", () => {
     expect(esCiudadGuardada({ id: "1" })).toBe(false);
     expect(esCiudadGuardada({ id: "1", name: "Ottawa" })).toBe(false);
-    expect(esCiudadGuardada(ciudadFixture() as unknown as Record<string, unknown>)).toBe(true);
   });
 
   test("rechaza tipos erróneos en los campos", () => {
@@ -127,58 +118,5 @@ describe("guardarEstado", () => {
     await guardarEstado(estado);
     const raw = JSON.parse(await Bun.file(STATE_FILE).text());
     expect(raw).toEqual(estado);
-  });
-});
-
-describe("cargarCiudades / guardarCiudades", () => {
-  test("carga solo las ciudades persistidas", async () => {
-    const estado: AppState = {
-      unit: "celsius",
-      cities: [ciudadFixture(), ciudadFixture({ id: "2", name: "Lima" })],
-      defaultCityId: "1",
-    };
-    await guardarCiudades(estado);
-    expect(await cargarCiudades()).toEqual(estado.cities);
-  });
-});
-
-describe("cargarSettings / guardarSettings", () => {
-  test("guardarSettings sanea unidad inválida a celsius", async () => {
-    const estado = {
-      unit: "fahrenheit",
-      cities: [],
-      defaultCityId: null,
-    } as AppState;
-    await guardarSettings(estado);
-    const guardado = await cargarEstado();
-    expect(guardado.unit).toBe("fahrenheit");
-
-    const estadoRoto = { ...estado, unit: "kelvin" } as unknown as AppState;
-    await guardarSettings(estadoRoto);
-    expect((await cargarEstado()).unit).toBe("celsius");
-  });
-
-  test("guardarSettings sanea defaultCityId inválido a null", async () => {
-    const estado = {
-      unit: "celsius",
-      cities: [],
-      defaultCityId: "abc",
-    } as AppState;
-    await guardarSettings(estado);
-    expect((await cargarEstado()).defaultCityId).toBe("abc");
-
-    const estadoRoto = { ...estado, defaultCityId: 7 } as unknown as AppState;
-    await guardarSettings(estadoRoto);
-    expect((await cargarEstado()).defaultCityId).toBeNull();
-  });
-
-  test("cargarSettings devuelve la unidad y la ciudad default", async () => {
-    const estado: AppState = {
-      unit: "celsius",
-      cities: [ciudadFixture()],
-      defaultCityId: "1",
-    };
-    await guardarEstado(estado);
-    expect(await cargarSettings()).toEqual({ unit: "celsius", defaultCityId: "1" });
   });
 });

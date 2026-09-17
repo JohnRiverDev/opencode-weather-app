@@ -1,46 +1,12 @@
-import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
-import type { AppState, City } from "../src/types/City.ts";
-import type { GeoResult, PronosticoResult } from "../src/types/Weather.ts";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { afterEach, beforeEach, describe, expect, mock, spyOn, test, type Mock } from "bun:test";
+import type { AppState, City } from "../../src/types/City.ts";
+import { emitLine } from "../helpers/fakeReadline.ts";
 
-const dirBase = import.meta.dir + "/..";
-
-const mockPreguntar = mock(async () => "");
-const mockSeleccionarCiudad = mock<() => Promise<City | null>>(async () => null);
-const mockGuardarCiudades = mock(async () => {});
-const mockCargarCiudades = mock(async () => []);
-const mockGuardarSettings = mock(async () => {});
-const mockCargarSettings = mock(async () => ({ unit: "celsius", defaultCityId: null }));
-const mockObtenerClima = mock(async () => ({ temperature: 15, symbol: "°C" }));
-const mockObtenerPronostico = mock<() => Promise<PronosticoResult>>(async () => ({ symbol: "°C", days: [] }));
-const mockBuscarCiudad = mock<() => Promise<GeoResult | null>>(async () => null);
-
-const fakeRl = {
-  on() {
-    return fakeRl;
-  },
-  close() {},
-};
-
-await mock.module("node:readline", () => ({ createInterface: () => fakeRl }));
-await mock.module(`${dirBase}/src/presentation/input.ts`, () => ({
-  preguntar: mockPreguntar,
-  seleccionarCiudad: mockSeleccionarCiudad,
-}));
-await mock.module(`${dirBase}/src/storage/citiesStorage.ts`, () => ({
-  cargarCiudades: mockCargarCiudades,
-  guardarCiudades: mockGuardarCiudades,
-}));
-await mock.module(`${dirBase}/src/storage/settingsStorage.ts`, () => ({
-  cargarSettings: mockCargarSettings,
-  guardarSettings: mockGuardarSettings,
-}));
-await mock.module(`${dirBase}/src/api/weather.ts`, () => ({
-  obtenerClima: mockObtenerClima,
-  obtenerPronostico: mockObtenerPronostico,
-}));
-await mock.module(`${dirBase}/src/api/geocoding.ts`, () => ({
-  buscarCiudad: mockBuscarCiudad,
-}));
+const dirBase = import.meta.dir + "/../..";
+const cwdOriginal = process.cwd();
 
 const { buscarYAgregar } = await import(`${dirBase}/src/actions/addCity.ts`);
 const { climaCiudadDefault, climaTodasLasCiudades } = await import(`${dirBase}/src/actions/getWeather.ts`);
@@ -49,6 +15,41 @@ const { establecerDefault } = await import(`${dirBase}/src/actions/setDefaultCit
 const { pronostico7Dias } = await import(`${dirBase}/src/actions/forecast.ts`);
 const { alternarUnidad } = await import(`${dirBase}/src/actions/settings.ts`);
 const { mostrarListadoCiudades } = await import(`${dirBase}/src/actions/listCities.ts`);
+
+type HandlerFetch = (url: URL) => Response | Promise<Response>;
+const fetchOriginal = globalThis.fetch;
+let fetchMock: Mock<(input: string | URL | Request) => Promise<Response>>;
+
+function jsonResponse(datos: unknown, status = 200): Response {
+  return new Response(JSON.stringify(datos), { status });
+}
+
+function mockFetch(handler: HandlerFetch): void {
+  fetchMock = mock(async (input: string | URL | Request) => handler(new URL(String(input))));
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
+}
+
+function urlLlamada(indice = 0): URL {
+  return new URL(String(fetchMock.mock.calls[indice]?.[0]));
+}
+
+let dirTemp: string;
+
+beforeEach(() => {
+  dirTemp = fs.mkdtempSync(path.join(os.tmpdir(), "weather-actions-"));
+  process.chdir(dirTemp);
+  mockFetch(() => jsonResponse({}));
+  spyOn(process.stdout, "write").mockImplementation(() => true);
+});
+
+afterEach(() => {
+  globalThis.fetch = fetchOriginal;
+  spyOn(console, "log").mockRestore();
+  spyOn(console, "error").mockRestore();
+  spyOn(process.stdout, "write").mockRestore();
+  process.chdir(cwdOriginal);
+  fs.rmSync(dirTemp, { recursive: true, force: true });
+});
 
 function ciudad(parcial: Partial<City> = {}): City {
   return {
@@ -70,14 +71,9 @@ function estado(parcial: Partial<AppState> = {}): AppState {
   };
 }
 
-function respuestas(...valores: string[]): () => Promise<string> {
-  const cola = [...valores];
-  return async () => cola.shift() ?? "";
-}
-
 function capturarSalida() {
-  const log = spyOn(console, "log");
-  const error = spyOn(console, "error");
+  const log = spyOn(console, "log").mockImplementation(() => {});
+  const error = spyOn(console, "error").mockImplementation(() => {});
   return {
     log,
     error,
@@ -86,37 +82,32 @@ function capturarSalida() {
   };
 }
 
-beforeEach(() => {
-  mockPreguntar.mockClear().mockImplementation(async () => "");
-  mockSeleccionarCiudad.mockClear().mockImplementation(async () => null);
-  mockGuardarCiudades.mockClear();
-  mockCargarCiudades.mockClear();
-  mockGuardarSettings.mockClear();
-  mockCargarSettings.mockClear();
-  mockObtenerClima.mockClear().mockImplementation(async () => ({ temperature: 15, symbol: "°C" }));
-  mockObtenerPronostico.mockClear().mockImplementation(async () => ({
-    symbol: "°C",
-    days: [{ date: "2026-09-16", max: 20, min: 10 }],
-  }));
-  mockBuscarCiudad.mockClear().mockImplementation(async () => null);
-});
+async function existeArchivoEstado(): Promise<boolean> {
+  return Bun.file("weather-state.json").exists();
+}
 
-afterEach(() => {
-  spyOn(console, "log").mockRestore();
-  spyOn(console, "error").mockRestore();
-});
+async function leerEstado(): Promise<AppState> {
+  return (await Bun.file("weather-state.json").json()) as AppState;
+}
+
+const respuestaGeocoding = () =>
+  jsonResponse({
+    results: [{ name: "Ottawa", country: "Canadá", latitude: 45.41, longitude: -75.7 }],
+  });
 
 describe("buscarYAgregar", () => {
   test("ignora un nombre vacío", async () => {
+    emitLine("");
     const captura = capturarSalida();
-    await buscarYAgregar(estado());
-    expect(mockBuscarCiudad).not.toHaveBeenCalled();
+    const est = estado();
+    await buscarYAgregar(est);
+    expect(fetchMock).not.toHaveBeenCalled();
     expect(captura.log).not.toHaveBeenCalled();
   });
 
   test("muestra el error del servicio de geocoding", async () => {
-    mockPreguntar.mockImplementation(respuestas("bogotá"));
-    mockBuscarCiudad.mockImplementation(async () => {
+    emitLine("bogotá");
+    mockFetch(async () => {
       throw new Error("red caída");
     });
     const captura = capturarSalida();
@@ -128,7 +119,8 @@ describe("buscarYAgregar", () => {
   });
 
   test("avisa cuando no encuentra la ciudad", async () => {
-    mockPreguntar.mockImplementation(respuestas("ciudadfantasma"));
+    emitLine("ciudadfantasma");
+    mockFetch(() => jsonResponse({ results: [] }));
     const captura = capturarSalida();
     const est = estado();
     await buscarYAgregar(est);
@@ -137,53 +129,48 @@ describe("buscarYAgregar", () => {
   });
 
   test("cancela si la confirmación no es 's'", async () => {
-    mockPreguntar.mockImplementation(respuestas("ottawa", "n"));
-    mockBuscarCiudad.mockImplementation(async () => ({
-      name: "Ottawa",
-      country: "Canadá",
-      latitude: 45.41,
-      longitude: -75.7,
-    }));
+    emitLine("ottawa");
+    emitLine("n");
+    mockFetch(respuestaGeocoding);
     const captura = capturarSalida();
     const est = estado();
     await buscarYAgregar(est);
     expect(captura.salida()).toContain("Operación cancelada");
     expect(est.cities).toHaveLength(0);
-    expect(mockGuardarCiudades).not.toHaveBeenCalled();
+    expect(await existeArchivoEstado()).toBe(false);
   });
 
   test("no registra una ciudad que ya existe", async () => {
-    mockPreguntar.mockImplementation(respuestas("ottawa", "s"));
-    mockBuscarCiudad.mockImplementation(async () => ({
-      name: "Ottawa",
-      country: "Canadá",
-      latitude: 45.41,
-      longitude: -75.7,
-    }));
+    emitLine("ottawa");
+    emitLine("s");
+    mockFetch(respuestaGeocoding);
     const captura = capturarSalida();
     const est = estado({ cities: [ciudad()] });
     await buscarYAgregar(est);
     expect(captura.errores()).toContain("ya está registrada");
     expect(est.cities).toHaveLength(1);
-    expect(mockGuardarCiudades).not.toHaveBeenCalled();
+    expect(await existeArchivoEstado()).toBe(false);
   });
 
   test("agrega una ciudad nueva y la guarda", async () => {
-    mockPreguntar.mockImplementation(respuestas("medellin", "s"));
-    mockBuscarCiudad.mockImplementation(async () => ({
-      name: "Medellín",
-      country: "Colombia",
-      latitude: 6.24,
-      longitude: -75.57,
-    }));
+    emitLine("medellin");
+    emitLine("s");
+    mockFetch(() =>
+      jsonResponse({
+        results: [{ name: "Medellín", country: "Colombia", latitude: 6.24, longitude: -75.57 }],
+      })
+    );
     const captura = capturarSalida();
     const est = estado();
     await buscarYAgregar(est);
+    expect(urlLlamada().searchParams.get("name")).toBe("medellin");
     expect(est.cities).toHaveLength(1);
     expect(est.cities[0]).toMatchObject({ name: "Medellín", latitude: 6.24, longitude: -75.57 });
     expect(typeof est.cities[0]?.id).toBe("string");
-    expect(mockGuardarCiudades).toHaveBeenCalledWith(est);
     expect(captura.salida()).toContain('"Medellín" fue agregada correctamente');
+    const archivo = await leerEstado();
+    expect(archivo.cities).toHaveLength(1);
+    expect(archivo.cities[0]).toMatchObject({ name: "Medellín", latitude: 6.24, longitude: -75.57 });
   });
 });
 
@@ -192,26 +179,26 @@ describe("climaCiudadDefault", () => {
     const captura = capturarSalida();
     await climaCiudadDefault(estado());
     expect(captura.salida()).toContain("No hay ciudad default");
-    expect(mockObtenerClima).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   test("muestra el clima de la ciudad default", async () => {
-    mockObtenerClima.mockImplementation(async () => ({ temperature: 15, symbol: "°C" }));
+    mockFetch(() => jsonResponse({ current: { temperature_2m: 15 }, current_units: { temperature_2m: "°C" } }));
     const captura = capturarSalida();
     const c1 = ciudad();
     await climaCiudadDefault(estado({ cities: [c1], defaultCityId: "1" }));
-    expect(mockObtenerClima).toHaveBeenCalledWith(c1, "celsius");
+    expect(urlLlamada().searchParams.get("latitude")).toBe("45.41");
+    expect(urlLlamada().searchParams.get("current")).toBe("temperature_2m");
     expect(captura.salida()).toContain("Ottawa (Canadá):");
     expect(captura.salida()).toContain("15°C");
   });
 
   test("reacciona ante un error de la API", async () => {
-    mockObtenerClima.mockImplementation(async () => {
+    mockFetch(async () => {
       throw new Error("boom");
     });
     const captura = capturarSalida();
-    const c1 = ciudad();
-    await climaCiudadDefault(estado({ cities: [c1], defaultCityId: "1" }));
+    await climaCiudadDefault(estado({ cities: [ciudad()], defaultCityId: "1" }));
     expect(captura.errores()).toContain("Error al obtener el clima de Ottawa (Canadá): boom");
   });
 });
@@ -221,43 +208,53 @@ describe("climaTodasLasCiudades", () => {
     const captura = capturarSalida();
     await climaTodasLasCiudades(estado());
     expect(captura.salida()).toContain("No hay ciudades registradas");
-    expect(mockObtenerClima).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   test("consulta el clima de todas las ciudades con la unidad configurada", async () => {
+    mockFetch(() => jsonResponse({ current: { temperature_2m: 15 }, current_units: { temperature_2m: "°F" } }));
     const captura = capturarSalida();
     const c1 = ciudad();
     const c2 = ciudad({ id: "2", name: "Lima", country: "Perú", latitude: -12.04, longitude: -77.04 });
     await climaTodasLasCiudades(estado({ cities: [c1, c2], unit: "fahrenheit" }));
-    expect(mockObtenerClima).toHaveBeenCalledWith(c1, "fahrenheit");
-    expect(mockObtenerClima).toHaveBeenCalledWith(c2, "fahrenheit");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(urlLlamada(0).searchParams.get("temperature_unit")).toBe("fahrenheit");
+    expect(urlLlamada(1).searchParams.get("temperature_unit")).toBe("fahrenheit");
+    expect(urlLlamada(1).searchParams.get("latitude")).toBe("-12.04");
     expect(captura.salida()).toContain("Ottawa (Canadá):");
     expect(captura.salida()).toContain("Lima (Perú):");
+    expect(captura.salida()).toContain("15°F");
   });
 });
 
 describe("eliminarCiudad", () => {
   test("no elimina nada si la selección se cancela", async () => {
+    emitLine("  ");
+    capturarSalida();
     const est = estado({ cities: [ciudad()] });
     await eliminarCiudad(est);
     expect(est.cities).toHaveLength(1);
-    expect(mockGuardarCiudades).not.toHaveBeenCalled();
+    expect(await existeArchivoEstado()).toBe(false);
   });
 
   test("elimina la ciudad y limpia el default si coinciden", async () => {
-    mockSeleccionarCiudad.mockImplementation(async () => ciudad());
+    emitLine("1");
     const captura = capturarSalida();
     const c2 = ciudad({ id: "2", name: "Lima", country: "Perú", latitude: -12.04, longitude: -77.04 });
     const est = estado({ cities: [ciudad(), c2], defaultCityId: "1" });
     await eliminarCiudad(est);
     expect(est.cities).toEqual([c2]);
     expect(est.defaultCityId).toBeNull();
-    expect(mockGuardarCiudades).toHaveBeenCalledWith(est);
     expect(captura.salida()).toContain('"Ottawa" fue eliminada');
+    const archivo = await leerEstado();
+    expect(archivo.cities).toHaveLength(1);
+    expect(archivo.cities[0]).toMatchObject({ id: "2" });
+    expect(archivo.defaultCityId).toBeNull();
   });
 
   test("conserva el default cuando se elimina otra ciudad", async () => {
-    mockSeleccionarCiudad.mockImplementation(async () => ciudad({ id: "2", name: "Lima" }));
+    emitLine("2");
+    capturarSalida();
     const est = estado({ cities: [ciudad(), ciudad({ id: "2", name: "Lima" })], defaultCityId: "1" });
     await eliminarCiudad(est);
     expect(est.defaultCityId).toBe("1");
@@ -269,45 +266,53 @@ describe("establecerDefault", () => {
     const captura = capturarSalida();
     await establecerDefault(estado());
     expect(captura.salida()).toContain("No hay ciudades registradas");
-    expect(mockSeleccionarCiudad).not.toHaveBeenCalled();
   });
 
   test("no guarda si la selección se cancela", async () => {
+    emitLine("  ");
+    capturarSalida();
     const est = estado({ cities: [ciudad()] });
     await establecerDefault(est);
-    expect(mockGuardarSettings).not.toHaveBeenCalled();
+    expect(est.defaultCityId).toBeNull();
+    expect(await existeArchivoEstado()).toBe(false);
   });
 
   test("establece la ciudad default y la guarda", async () => {
-    mockSeleccionarCiudad.mockImplementation(async () => ciudad({ id: "2", name: "Lima" }));
+    emitLine("2");
     const captura = capturarSalida();
     const est = estado({ cities: [ciudad(), ciudad({ id: "2", name: "Lima" })] });
     await establecerDefault(est);
     expect(est.defaultCityId).toBe("2");
-    expect(mockGuardarSettings).toHaveBeenCalledWith(est);
     expect(captura.salida()).toContain("Ciudad default establecida: Lima");
+    const archivo = await leerEstado();
+    expect(archivo.defaultCityId).toBe("2");
   });
 });
 
 describe("pronostico7Dias", () => {
   test("no consulta si la selección se cancela", async () => {
+    emitLine("  ");
+    capturarSalida();
     await pronostico7Dias(estado({ cities: [ciudad()] }));
-    expect(mockObtenerPronostico).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   test("muestra el pronóstico formateado", async () => {
-    mockSeleccionarCiudad.mockImplementation(async () => ciudad());
-    mockObtenerPronostico.mockImplementation(async () => ({
-      symbol: "°F",
-      days: [
-        { date: "2026-09-16", max: 20, min: 10 },
-        { date: "2026-09-17", max: 22, min: 12 },
-      ],
-    }));
+    emitLine("1");
+    mockFetch(() =>
+      jsonResponse({
+        daily: {
+          time: ["2026-09-16", "2026-09-17"],
+          temperature_2m_max: [20, 22],
+          temperature_2m_min: [10, 12],
+        },
+        daily_units: { temperature_2m_max: "°F" },
+      })
+    );
     const captura = capturarSalida();
-    const c1 = ciudad();
-    await pronostico7Dias(estado({ cities: [c1], unit: "fahrenheit" }));
-    expect(mockObtenerPronostico).toHaveBeenCalledWith(c1, "fahrenheit");
+    await pronostico7Dias(estado({ cities: [ciudad()], unit: "fahrenheit" }));
+    expect(urlLlamada().searchParams.get("temperature_unit")).toBe("fahrenheit");
+    expect(urlLlamada().searchParams.get("daily")).toBe("temperature_2m_max,temperature_2m_min");
     expect(captura.salida()).toContain("Pronóstico 7 días de Ottawa (Canadá):");
     expect(captura.salida()).toContain("mín");
     expect(captura.salida()).toContain("máx");
@@ -316,8 +321,8 @@ describe("pronostico7Dias", () => {
   });
 
   test("reacciona ante un error de la API", async () => {
-    mockSeleccionarCiudad.mockImplementation(async () => ciudad());
-    mockObtenerPronostico.mockImplementation(async () => {
+    emitLine("1");
+    mockFetch(async () => {
       throw new Error("sin datos");
     });
     const captura = capturarSalida();
@@ -332,8 +337,9 @@ describe("alternarUnidad", () => {
     const est = estado({ unit: "celsius" });
     await alternarUnidad(est);
     expect(est.unit).toBe("fahrenheit");
-    expect(mockGuardarSettings).toHaveBeenCalledWith(est);
     expect(captura.salida()).toContain("Unidad de temperatura: °F");
+    const archivo = await leerEstado();
+    expect(archivo.unit).toBe("fahrenheit");
   });
 
   test("alterna de fahrenheit a celsius", async () => {

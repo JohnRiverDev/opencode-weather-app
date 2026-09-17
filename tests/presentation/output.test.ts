@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
-import { listarCiudades, mostrarError, mostrarExito, mostrarMensaje } from "../src/presentation/output.ts";
-import type { City } from "../src/types/City.ts";
+import { listarCiudades, mostrarError, mostrarExito, mostrarMensaje } from "../../src/presentation/output.ts";
+import type { City } from "../../src/types/City.ts";
 
 function ciudad(parcial: Partial<City> = {}): City {
   return {

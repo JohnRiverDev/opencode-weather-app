@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import type { Mock } from "bun:test";
-import { mostrarMenu } from "../src/presentation/menu.ts";
-import type { AppState, City } from "../src/types/City.ts";
+import { mostrarMenu } from "../../src/presentation/menu.ts";
+import type { AppState, City } from "../../src/types/City.ts";
 
 function estado(parcial: Partial<AppState> = {}): AppState {
   return {

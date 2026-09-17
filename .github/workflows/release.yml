@@ -50,6 +50,6 @@ jobs:
           draft: false
           prerelease: false
           files: |
-            out/weather.exe
+            out/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

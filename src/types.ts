@@ -36,14 +36,3 @@ export interface PronosticoResult {
   symbol: string;
   days: PronosticoDia[];
 }
-
-export interface PronosticoDia {
-  date: string;
-  max: number;
-  min: number;
-}
-
-export interface PronosticoResult {
-  symbol: string;
-  days: PronosticoDia[];
-}

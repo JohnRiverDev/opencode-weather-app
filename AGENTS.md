@@ -14,9 +14,12 @@ State (cities, default city, °C/°F) persists to `weather-state.json` in cwd (g
 
 ## Commands
 - Run: `bun run src/index.ts`
-- Execute binary: `bun build --compile src/index.ts --outfile out/weather` (output dirs `out`/`dist` are gitignored)
+- Tests: `bun test tests/` (Bun's built-in runner; no extra deps). Config via package.json script `test`.
+- Execute binary: `bun run build` = primero `bun test tests/` y, solo si pasan, `bun build --compile src/index.ts --outfile out/weather.exe` (la build **se bloquea si algún test falla**). Output dirs `out`/`dist` are gitignored.
 - A compiled binary is the project goal (see README "binario ejecutable").
-- No test/lint/format/typecheck scripts exist — don't invent them. Use `bunx tsc --noEmit` for a type check if needed.
+- Type check if needed: `bunx tsc --noEmit`. No lint/format scripts exist — don't invent them.
+- Tests live in `tests/`, use `import * as X from "bun:test"` API (`describe`/`test`/`expect`/`mock`/`spyOn`), mock `globalThis.fetch` for API calls and `mock.module` for modules with side effects.
+- Bun test runs **all test files in a single process**: `mock.module` and `globalThis` changes persist for the whole run and leak across files. The only file that mocks source modules is `tests/zzz-actions.test.ts` — keep it named `zzz-*` (or later in alphabetical order) so its global mocks never break the other specs (`api`, `input`, `storage`).
 
 ## Conventions
 - Package manager is **Bun** (`bun.lock` committed). Never use npm/yarn; don't add extra dependencies.

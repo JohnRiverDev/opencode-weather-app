@@ -1,6 +1,5 @@
-import type { AppState, City } from "./types.ts";
-
-const STATE_FILE = "weather-state.json";
+import type { AppState, City } from "../types/City.ts";
+import { STATE_FILE } from "../utils/constants.ts";
 
 export function crearEstadoInicial(): AppState {
   return {
@@ -10,7 +9,7 @@ export function crearEstadoInicial(): AppState {
   };
 }
 
-function esCiudad(valor: unknown): valor is City {
+export function esCiudadGuardada(valor: unknown): valor is City {
   if (typeof valor !== "object" || valor === null) return false;
   const ciudad = valor as Partial<City>;
   return (
@@ -30,7 +29,7 @@ export async function cargarEstado(): Promise<AppState> {
     const data = (await archivo.json()) as Partial<AppState>;
     return {
       unit: data.unit === "fahrenheit" ? "fahrenheit" : "celsius",
-      cities: Array.isArray(data.cities) ? data.cities.filter(esCiudad) : [],
+      cities: Array.isArray(data.cities) ? data.cities.filter(esCiudadGuardada) : [],
       defaultCityId: typeof data.defaultCityId === "string" ? data.defaultCityId : null,
     };
   } catch {
